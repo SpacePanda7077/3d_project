@@ -7,8 +7,10 @@ import {
   UniversalCamera,
   Vector3,
 } from "babylonjs";
+import RAPIER from "@dimforge/rapier3d-compat";
 
 import * as GUI from "@babylonjs/gui";
+import { Player } from "./classes/player";
 
 export class Game {
   private _scene: Scene;
@@ -16,8 +18,15 @@ export class Game {
   private _engine: Engine;
   camera: UniversalCamera;
   light1: HemisphericLight;
-  sphere: import("babylonjs").Mesh;
-  ground: import("babylonjs").GroundMesh;
+
+  ground!: import("babylonjs").GroundMesh;
+  world!: RAPIER.World;
+
+  groundBody!: RAPIER.RigidBodyDesc;
+  groundRigidBody!: RAPIER.RigidBody;
+  velocity!: RAPIER.Vector3;
+  player!: Player;
+
   constructor(canvas: HTMLCanvasElement, engine: Engine) {
     this._canvas = canvas;
     this._engine = new Engine(this._canvas, true);
@@ -29,13 +38,6 @@ export class Game {
       this._scene
     );
 
-    this.sphere = MeshBuilder.CreateSphere(
-      "sphere",
-      { diameter: 1 },
-      this._scene
-    );
-    this.sphere.position = new Vector3(0, 2, 0);
-
     this.camera = new UniversalCamera(
       "cam1",
       new Vector3(0, 0, 5),
@@ -45,12 +47,55 @@ export class Game {
     this.camera.rotation._y = 0;
     this.camera.position = new Vector3(0, 1, -5);
 
+    this.addMenu();
+
+    this.initializePhysics();
+  }
+  async initializePhysics() {
+    await RAPIER.init();
+    this.world = new RAPIER.World(new RAPIER.Vector3(0, -9.81, 0));
+    this.velocity = new RAPIER.Vector3(0, 0, 0);
+    this.createStaticObj();
+    this.player = new Player(this._scene, this.world);
+    //this.handleMovement();
+
+    this._engine.runRenderLoop(() => {
+      this.world?.step();
+      //this.box.rotation.y += 0.01;
+      this.syncMeshes();
+      this.player.sync();
+      this.player.handleMovement();
+      this.player.movePlayer(this._engine);
+      this._scene.render();
+    });
+  }
+
+  createStaticObj() {
     this.ground = MeshBuilder.CreateGround(
       "ground",
       { width: 20, height: 20 },
       this._scene
     );
+    this.groundBody = new RAPIER.RigidBodyDesc(RAPIER.RigidBodyType.Fixed);
+    this.groundRigidBody = this.world.createRigidBody(this.groundBody);
 
+    const groundColliderDesc = RAPIER.ColliderDesc.cuboid(10, 0.1, 10);
+    this.world.createCollider(groundColliderDesc, this.groundRigidBody);
+  }
+  syncMeshes() {
+    // ground syncing ............................................................//
+    const groundPos = this.groundRigidBody.translation();
+    const groundRot = this.groundRigidBody.rotation();
+    this.ground.position.set(groundPos.x, groundPos.y, groundPos.z);
+    this.ground.rotationQuaternion?.set(
+      groundRot.x,
+      groundRot.y,
+      groundRot.z,
+      groundRot.w
+    );
+  }
+
+  addMenu() {
     const MenuGUI = GUI.AdvancedDynamicTexture.CreateFullscreenUI(
       "UI",
       true,
@@ -65,22 +110,8 @@ export class Game {
       console.log("pointer down");
     });
     MenuGUI.addControl(button);
-
-    window.addEventListener("keydown", (event) => {
-      if (event.key === "d") {
-        this.sphere.position.x += 1;
-      }
-      if (event.key === "a") {
-        this.sphere.position.x -= 1;
-      }
-      if (event.key === "w") {
-        this.sphere.position.z += 1;
-      }
-      if (event.key === "s") {
-        this.sphere.position.z -= 1;
-      }
-    });
   }
+
   getScene() {
     return this._scene;
   }
