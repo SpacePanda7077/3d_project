@@ -61,7 +61,6 @@ export class Game {
 
     this._engine.runRenderLoop(() => {
       this.world?.step();
-      //this.box.rotation.y += 0.01;
       this.syncMeshes();
       this.player.sync();
       this.player.handleMovement();
